@@ -40,12 +40,34 @@ def parse_notes(text):
     return cards
 
 
+
 def chop_ending(word):
-    # cuts off endings so "sorted" and "sorts" both become "sort"
-    for ending in ("ing", "ed", "es", "s"):
-        if word.endswith(ending) and len(word) > len(ending) + 2:
-            return word[: -len(ending)]
+    """Remove common word endings without changing the meaning too much."""
+
+    # Handle common spelling changes
+    special_words = {
+        "coding": "code",
+        "programming": "programming",
+        "programs": "program",
+        "creating": "create",
+        "created": "create",
+        "building": "build",
+        "built": "build",
+        "storing": "store",
+        "stored": "store",
+        "saving": "save",
+        "saved": "save",
+    }
+
+    if word in special_words:
+        return special_words[word]
+
+    # Remove simple plural endings
+    if word.endswith("s") and not word.endswith(("ss", "us", "is")) and len(word) > 4:
+        return word[:-1]
+
     return word
+
 
 
 def get_words(text):
@@ -57,14 +79,56 @@ def get_words(text):
     return words
 
 
+
 def grade(user_answer, real_answer):
-    """Gives a score from 0 to 1 for how many of the answer's
-    keywords were in what I typed."""
-    needed = set(get_words(real_answer))
+    """Compare answers while allowing common wording differences."""
+
+    # Common words that students might use interchangeably
+    synonyms = {
+        "create": "make",
+        "build": "make",
+        "develop": "make",
+        "generate": "make",
+        "produce": "make",
+        "program": "software",
+        "application": "software",
+        "app": "software",
+        "coding": "programming",
+        "code": "programming",
+        "developer": "programmer",
+        "dev": "programmer",
+        "quick": "fast",
+        "rapid": "fast",
+        "large": "big",
+        "small": "little",
+        "store": "save",
+        "keep": "save",
+        "retrieve": "get",
+        "fetch": "get",
+        "find": "get",
+    }
+
+    def normalize(text):
+        words = get_words(text)
+
+        normalized = set()
+
+        for word in words:
+            normalized.add(synonyms.get(word, word))
+
+        return normalized
+
+    needed = normalize(real_answer)
+    given = normalize(user_answer)
+
     if not needed:
         return 0.0
-    given = set(get_words(user_answer))
-    return len(needed & given) / len(needed)
+
+    # Give credit for matching keywords or common synonyms
+    matches = len(needed & given)
+
+    return matches / len(needed)
+
 
 
 def next_box(box, was_right):

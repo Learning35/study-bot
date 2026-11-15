@@ -10,6 +10,24 @@ let activeDeck = null;     // the deck I picked
 let currentCard = null;    // the card I'm answering right now
 let lastCardId = null;     // so the same card doesn't come up twice in a row
 let settleMiss = null;     // saves a missed card if I move on without clicking a button
+let quizSession = null; // tracks the current quiz attempt
+
+// Start a fresh quiz attempt for the selected deck
+function startQuizSession() {
+  quizSession = {
+    deckId: activeDeck.id,
+    answeredIds: new Set(),
+    correct: 0,
+    total: 0,
+    fullDeck: true
+  };
+}
+
+// Clear quiz progress when switching or changing decks
+function resetQuizSession() {
+  quizSession = null;
+}
+
 
 const SAMPLE_NOTES = [
   "Stack: last in, first out data structure",
@@ -118,14 +136,25 @@ async function loadStats() {
   return stats;
 }
 
+
 async function pickDeck(id) {
   if (settleMiss) await settleMiss();
+
   activeDeck = decks.find((d) => d.id === id);
   currentCard = null;
   lastCardId = null;
+
+  // Don't carry quiz progress into another deck
+  resetQuizSession();
+
   drawDecks();
-  say("Switched to " + activeDeck.name + ". " + activeDeck.due + " cards due. Type quiz when you're ready.");
+
+  say(
+    "Switched to " + activeDeck.name + ". " +
+    activeDeck.due + " cards due. Type quiz when you're ready."
+  );
 }
+
 
 async function deleteDeck(deck) {
   await api("/api/decks/" + deck.id, "DELETE");
@@ -152,6 +181,7 @@ async function addDeck(name, notes) {
 
 // ---------- quiz flow ----------
 
+
 async function nextCard(force) {
   if (settleMiss) await settleMiss();
 
@@ -160,24 +190,74 @@ async function nextCard(force) {
     return;
   }
 
-  let url = "/api/decks/" + activeDeck.id + "/next?force=" + (force ? 1 : 0);
-  if (lastCardId) url += "&last=" + lastCardId;
+  // Start a new quiz session if one doesn't exist
+  if (!quizSession || quizSession.deckId !== activeDeck.id) {
+    startQuizSession();
+  }
+
+  // A full-deck quiz includes cards that aren't due yet
+  const fullDeck = quizSession.fullDeck;
+  let url = "/api/decks/" + activeDeck.id + "/next?force=" + (fullDeck ? 1 : 0);
+
+  // Tell Flask which cards we've already answered
+  if (quizSession.answeredIds.size > 0) {
+    url += "&exclude=" + Array.from(quizSession.answeredIds).join(",");
+  }
+
+  // Avoid showing the previous card when possible
+  if (lastCardId) {
+    url += "&last=" + lastCardId;
+  }
 
   const data = await api(url);
+
+  // No more cards left in this attempt
   if (data.done) {
-    if (force) {
-      say("This deck doesn't have any cards.");
-    } else {
-      say('You\'re caught up, nothing in this deck is due. Type "quiz anyway" to practice early.');
+    currentCard = null;
+
+    if (quizSession.total === 0) {
+      say("This deck doesn't have any cards yet.");
+      resetQuizSession();
+      return;
     }
+
+    const percent = Math.round(
+      (quizSession.correct / quizSession.total) * 100
+    );
+
+    say(
+      "🎉 Quiz complete!\n" +
+      "You answered " + quizSession.total + " flashcards.\n" +
+      "Your score: " + quizSession.correct + "/" +
+      quizSession.total + " (" + percent + "%)"
+    );
+
+    // Retake button
+    const row = document.createElement("div");
+    row.className = "chip-row";
+
+    row.append(
+      makeChip("🔄 Retake Quiz", async () => {
+        resetQuizSession();
+        lastCardId = null;
+        await nextCard(true);
+      })
+    );
+
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+
+    resetQuizSession();
     return;
   }
 
   currentCard = data;
   lastCardId = data.id;
-  say("What does \"" + data.term + "\" mean? \u{1F914}");
+
+  say("What does \"" + data.term + "\" mean? 🤔");
   chatInput.focus();
 }
+
 
 async function saveResult(cardId, correct) {
   const stats = await api("/api/cards/" + cardId + "/result", "POST", { correct: correct });
@@ -185,57 +265,120 @@ async function saveResult(cardId, correct) {
   await loadDecks();
 }
 
+
 async function checkAnswer(text) {
   const card = currentCard;
   currentCard = null;
 
-  const result = await api("/api/cards/" + card.id + "/answer", "POST", { answer: text });
+  const result = await api(
+    "/api/cards/" + card.id + "/answer",
+    "POST",
+    { answer: text }
+  );
+
+  // Record an answer in the current quiz attempt
+  function recordAnswer(correct) {
+    if (!quizSession || quizSession.answeredIds.has(card.id)) {
+      return;
+    }
+
+    quizSession.answeredIds.add(card.id);
+    quizSession.total += 1;
+
+    if (correct) {
+      quizSession.correct += 1;
+    }
+  }
 
   if (result.passed) {
-    say("Yes! \u{1F389} " + card.term + ": " + result.definition, "bot", "good");
+    say(
+      "Yes! 🎉 " + card.term + ": " + result.definition,
+      "bot",
+      "good"
+    );
+
     await saveResult(card.id, true);
+    recordAnswer(true);
     await nextCard(false);
     return;
   }
 
-  // got it wrong: show the answer, and I can say if the grader was too strict
-  const bubble = say("Almost \u{1F605} " + card.term + ": " + result.definition, "bot", "bad");
+  // Show the correct answer and let the student challenge the grader
+  const bubble = say(
+    "Almost 😅 " + card.term + ": " + result.definition,
+    "bot",
+    "bad"
+  );
+
   const row = document.createElement("div");
   row.className = "chip-row";
+
   let settled = false;
 
   async function settle(correct, goNext) {
     if (settled) return;
+
     settled = true;
     settleMiss = null;
     row.remove();
+
     await saveResult(card.id, correct);
-    if (goNext) await nextCard(false);
+    recordAnswer(correct);
+
+    if (goNext) {
+      await nextCard(false);
+    }
   }
 
   row.append(
     makeChip("I was right", () => settle(true, true)),
     makeChip("Next card", () => settle(false, true))
   );
+
   bubble.appendChild(row);
-  log.scrollTop = log.scrollHeight; // scroll down so the buttons show
+  log.scrollTop = log.scrollHeight;
+
   settleMiss = () => settle(false, false);
 }
+
+
 
 async function skipCard() {
   if (!currentCard) {
     say("Nothing to skip. Type quiz to get a card.");
     return;
   }
+
   const card = currentCard;
   currentCard = null;
 
-  // an empty answer just gives back the definition
-  const result = await api("/api/cards/" + card.id + "/answer", "POST", { answer: "" });
-  say(card.term + ": " + result.definition, "bot", "bad");
+  // Get the correct definition
+  const result = await api(
+    "/api/cards/" + card.id + "/answer",
+    "POST",
+    { answer: "" }
+  );
+
+  // Show the answer to the student
+  say(
+    "Skipped 😅 " + card.term + ": " + result.definition,
+    "bot",
+    "bad"
+  );
+
+  // Save the skipped card as incorrect
   await saveResult(card.id, false);
+
+  // Count this card as answered during the current quiz
+  if (quizSession && !quizSession.answeredIds.has(card.id)) {
+    quizSession.answeredIds.add(card.id);
+    quizSession.total += 1;
+  }
+
+  // Continue to the next flashcard
   await nextCard(false);
 }
+
 
 async function showStats() {
   const s = await loadStats();
@@ -495,11 +638,26 @@ robotPic.src = "/static/robot.png";
 
 (async function start() {
   drawClock();
-  say("Hi, I'm Study Bot! \u{1F916} Make a deck from your notes and I'll quiz you. The cards you miss come back more often. Type help if you get stuck.");
+
+  // Check whether the student is already logged in.
+  const loggedIn = await checkSession();
+
+  if (!loggedIn) {
+    return;
+  }
+
+  // Only load student information after authentication.
   try {
     await loadDecks();
     await loadStats();
+
+    say(
+      "Welcome back to Study Bot! 🤖 " +
+      "Make a deck from your notes and I'll quiz you. " +
+      "Type help if you get stuck."
+    );
   } catch (err) {
-    say("I couldn't reach the server. Make sure app.py is running.");
+    console.error(err);
+    say("I couldn't load your study data. Please try refreshing.");
   }
 })();

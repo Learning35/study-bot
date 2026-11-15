@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,87 +8,376 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Study Bot">
   <title>Study Bot</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
+
 <body>
-  <div class="page">
+
+  <!-- Login and signup screen -->
+  <section id="authScreen" class="auth-screen" hidden>
+    <div class="auth-card">
+
+      <!-- Robot mascot -->
+      <div class="auth-mascot">
+        <img
+          src="{{ url_for('static', filename='robot.png') }}"
+          alt="Study Bot robot mascot"
+        >
+      </div>
+
+      <h1>Study Bot 🤖</h1>
+      <p class="auth-subtitle">
+        Your little study buddy is ready to help!
+      </p>
+
+      <!-- Login and signup tabs -->
+      <div class="auth-tabs">
+        <button id="loginTab" class="btn blue" type="button">
+          Log in
+        </button>
+
+        <button id="signupTab" class="btn" type="button">
+          Sign up
+        </button>
+      </div>
+
+      <!-- Account form -->
+      <form id="authForm">
+        <h2 id="authTitle">Welcome back! 👋</h2>
+
+        <!-- Email -->
+        <label for="authEmail">Email address</label>
+        <input
+          id="authEmail"
+          type="email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          required
+        >
+
+        <!-- Password -->
+        <label for="authPassword">Password</label>
+
+        <div class="password-field">
+          <input
+            id="authPassword"
+            type="password"
+            placeholder="Enter your password"
+            autocomplete="current-password"
+            required
+          >
+
+          <button
+            id="togglePassword"
+            class="password-toggle"
+            type="button"
+            aria-label="Show password"
+            aria-pressed="false"
+          >
+            Show
+          </button>
+        </div>
+
+        <!-- Password instructions for signup -->
+        <p id="passwordHelp" class="password-help" hidden>
+          Use at least 12 characters (maximum 128).
+          Example: <strong>SunnyRobot2026!</strong>
+          No special symbols or uppercase letters are required.
+        </p>
+
+        <!-- Confirm password for signup -->
+        <div id="confirmPasswordGroup" hidden>
+          <label for="confirmPassword">Confirm password</label>
+
+          <div class="password-field">
+            <input
+              id="confirmPassword"
+              type="password"
+              placeholder="Enter your password again"
+              autocomplete="new-password"
+            >
+
+            <button
+              id="toggleConfirmPassword"
+              class="password-toggle"
+              type="button"
+              aria-label="Show confirmation password"
+              aria-pressed="false"
+            >
+              Show
+            </button>
+          </div>
+        </div>
+
+        <!-- Account messages -->
+        <p
+          id="authMessage"
+          class="form-msg"
+          role="status"
+          aria-live="polite"
+        ></p>
+
+        <!-- Submit button -->
+        <button
+          id="authSubmit"
+          class="btn pink auth-submit"
+          type="submit"
+        >
+          Log in 🚀
+        </button>
+      </form>
+
+      <p class="auth-footer">
+        Make studying a little more fun! ✨
+      </p>
+    </div>
+  </section>
+
+  <!-- Main Study Bot application -->
+  <div id="studyApp" class="page" hidden>
+
     <header class="top">
       <h1><span class="logo">🤖</span> Study Bot</h1>
+
+      <!-- Study statistics -->
       <span class="stats">
-        <span class="pill" title="Right answers in a row">🔥 <b id="streakNum">0</b></span>
-        <span class="pill" title="How often you're right">🎯 <b id="pctNum">0%</b></span>
+        <span class="pill" title="Right answers in a row">
+          🔥 <b id="streakNum">0</b>
+        </span>
+
+        <span class="pill" title="How often you're right">
+          🎯 <b id="pctNum">0%</b>
+        </span>
       </span>
+
+      <!-- Focus timer -->
       <span class="timer">
-        <button id="timerLess" class="pill tap" type="button" aria-label="5 minutes less">&minus;</button>
-        <button id="timerBtn" class="pill tap" type="button" title="Start or pause the focus timer"><span id="timerIcon">⏱</span> <span id="clock">25:00</span></button>
-        <button id="timerMore" class="pill tap" type="button" aria-label="5 minutes more">+</button>
-        <button id="timerReset" class="pill tap" type="button" aria-label="Reset timer">↺</button>
+        <button
+          id="timerLess"
+          class="pill tap"
+          type="button"
+          aria-label="5 minutes less"
+        >
+          &minus;
+        </button>
+
+        <button
+          id="timerBtn"
+          class="pill tap"
+          type="button"
+          title="Start or pause the focus timer"
+        >
+          <span id="timerIcon">⏱</span>
+          <span id="clock">25:00</span>
+        </button>
+
+        <button
+          id="timerMore"
+          class="pill tap"
+          type="button"
+          aria-label="5 minutes more"
+        >
+          +
+        </button>
+
+        <button
+          id="timerReset"
+          class="pill tap"
+          type="button"
+          aria-label="Reset timer"
+        >
+          ↺
+        </button>
       </span>
     </header>
 
-    <nav class="decks" aria-label="Your decks">
-      <label for="deckSelect" class="sr">Pick a deck to be quizzed on</label>
-      <select id="deckSelect"></select>
-      <button id="manageBtn" class="btn" type="button">⚙️ Manage</button>
-      <button id="newDeckBtn" class="btn green" type="button">+ New deck</button>
-    </nav>
+    <!-- Account information -->
+    <div class="account-bar">
+      <span id="accountEmail">Student</span>
 
-    <main class="chat-card">
-      <div id="log" class="log" aria-live="polite"></div>
-    </main>
-
-    <div class="chips">
-      <button type="button" class="btn blue" data-cmd="quiz">Quiz me! 🎲</button>
-      <button type="button" class="btn" data-cmd="skip">Skip</button>
-      <button type="button" class="btn" data-cmd="help">Help ❓</button>
-      <button id="clearBtn" type="button" class="btn icon" aria-label="Clear chat" title="Clear chat">🧹<span class="label"> Clear</span></button>
+      <button id="logoutBtn" class="btn" type="button">
+        Log out 👋
+      </button>
     </div>
 
+    <!-- Deck navigation -->
+    <nav class="decks" aria-label="Your decks">
+      <label for="deckSelect" class="sr">
+        Pick a deck to be quizzed on
+      </label>
+
+      <select id="deckSelect"></select>
+
+      <button id="manageBtn" class="btn" type="button">
+        ⚙️ Manage
+      </button>
+
+      <button id="newDeckBtn" class="btn green" type="button">
+        + New deck
+      </button>
+    </nav>
+
+    <!-- Chat -->
+    <main class="chat-card">
+      <div
+        id="log"
+        class="log"
+        aria-live="polite"
+      ></div>
+    </main>
+
+    <!-- Chat commands -->
+    <div class="chips">
+      <button type="button" class="btn blue" data-cmd="quiz">
+        Quiz me! 🎲
+      </button>
+
+      <button type="button" class="btn" data-cmd="skip">
+        Skip
+      </button>
+
+      <button type="button" class="btn" data-cmd="help">
+        Help ❓
+      </button>
+
+      <button
+        id="clearBtn"
+        type="button"
+        class="btn icon"
+        aria-label="Clear chat"
+        title="Clear chat"
+      >
+        🧹<span class="label"> Clear</span>
+      </button>
+    </div>
+
+    <!-- Message input -->
     <form id="chatForm" class="composer">
-      <label for="chatInput" class="sr">Your answer</label>
-      <input id="chatInput" type="text" autocomplete="off" placeholder="Type your answer here...">
-      <button class="btn pink" type="submit">Send 🚀</button>
+      <label for="chatInput" class="sr">
+        Your answer
+      </label>
+
+      <input
+        id="chatInput"
+        type="text"
+        autocomplete="off"
+        placeholder="Type your answer here..."
+      >
+
+      <button class="btn pink" type="submit">
+        Send 🚀
+      </button>
     </form>
   </div>
 
+  <!-- Create deck dialog -->
   <dialog id="deckDialog">
     <form id="deckForm">
       <h2>Make a deck ✨</h2>
+
       <label for="deckName">Name</label>
-      <input id="deckName" type="text" maxlength="40" placeholder="CSE 101 midterm" required>
-      <label for="deckNotes">Your notes: one card per line, like <i>term: meaning</i></label>
-      <textarea id="deckNotes" rows="6" placeholder="Stack: last in, first out&#10;Queue: first in, first out" required></textarea>
+      <input
+        id="deckName"
+        type="text"
+        maxlength="40"
+        placeholder="CSE 101 midterm"
+        required
+      >
+
+      <label for="deckNotes">
+        Your notes: one card per line, like
+        <i>term: meaning</i>
+      </label>
+
+      <textarea
+        id="deckNotes"
+        rows="6"
+        placeholder="Stack: last in, first out&#10;Queue: first in, first out"
+        required
+      ></textarea>
+
       <p id="formMsg" class="form-msg" role="status"></p>
+
       <div class="dialog-row">
-        <button id="sampleBtn" class="btn" type="button">Try a sample</button>
+        <button id="sampleBtn" class="btn" type="button">
+          Try a sample
+        </button>
+
         <span class="spacer"></span>
-        <button id="cancelDeck" class="btn" type="button">Cancel</button>
-        <button class="btn pink" type="submit">Save</button>
+
+        <button id="cancelDeck" class="btn" type="button">
+          Cancel
+        </button>
+
+        <button class="btn pink" type="submit">
+          Save
+        </button>
       </div>
     </form>
   </dialog>
+
+  <!-- Manage deck dialog -->
   <dialog id="manageDialog">
     <h2 id="manageTitle">Manage deck</h2>
+
     <p id="manageCount" class="count"></p>
-    <label for="moreNotes">Add more cards: one per line, like <i>term: meaning</i></label>
-    <textarea id="moreNotes" rows="5" placeholder="Heap: a tree where every parent is bigger than its children"></textarea>
+
+    <label for="moreNotes">
+      Add more cards: one per line, like
+      <i>term: meaning</i>
+    </label>
+
+    <textarea
+      id="moreNotes"
+      rows="5"
+      placeholder="Heap: a tree where every parent is bigger than its children"
+    ></textarea>
+
     <p id="manageMsg" class="form-msg" role="status"></p>
+
     <div id="manageRow" class="dialog-row">
-      <button id="deleteDeckBtn" class="btn red" type="button">Delete deck 🗑</button>
+      <button
+        id="deleteDeckBtn"
+        class="btn red"
+        type="button"
+      >
+        Delete deck 🗑
+      </button>
+
       <span class="spacer"></span>
-      <button id="closeManage" class="btn" type="button">Close</button>
-      <button id="addCardsBtn" class="btn pink" type="button">Add cards</button>
+
+      <button id="closeManage" class="btn" type="button">
+        Close
+      </button>
+
+      <button id="addCardsBtn" class="btn pink" type="button">
+        Add cards
+      </button>
     </div>
+
     <div id="confirmRow" class="dialog-row" hidden>
       <b>Delete this deck for good?</b>
+
       <span class="spacer"></span>
-      <button id="keepDeck" class="btn" type="button">Keep it</button>
-      <button id="confirmDelete" class="btn red" type="button">Yes, delete</button>
+
+      <button id="keepDeck" class="btn" type="button">
+        Keep it
+      </button>
+
+      <button id="confirmDelete" class="btn red" type="button">
+        Yes, delete
+      </button>
     </div>
   </dialog>
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+
+  <!-- JavaScript -->
+  <script src="{{ url_for('static', filename='auth.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+
 </body>
 </html>

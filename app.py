@@ -14,9 +14,24 @@ from flask import Flask, g, jsonify, render_template, request
 
 import quiz
 
+from flask_login import LoginManager, UserMixin, login_user, logout_user, current_user, login_required
+from werkzeug.security import generate_password_hash, check_password_hash
+
 app = Flask(__name__)
+# Configure secure login sessions
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or os.urandom(32)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    # Return JSON instead of redirecting API requests
+    return jsonify(error="Please log in to continue."), 401
+
 DB_FILE = os.environ.get("DATABASE_PATH", "studybot.db")
 DATABASE_URL = os.environ.get("DATABASE_URL")
+
 
 def execute_query(db, query, params=()):
     # PostgreSQL uses %s instead of ? for SQL values
@@ -24,6 +39,180 @@ def execute_query(db, query, params=()):
         query = query.replace("?", "%s")
 
     return db.execute(query, params)
+
+
+class User(UserMixin):
+    # Represent a student account
+    def __init__(self, id, email, password_hash):
+        self.id = id
+        self.email = email
+        self.password_hash = password_hash
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    # Find the logged-in student in the database
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        return None
+
+    db = get_db()
+
+    row = execute_query(
+        db,
+        "SELECT id, email, password_hash FROM users WHERE id = ?",
+        (user_id,)
+    ).fetchone()
+
+    if row is None:
+        return None
+
+    return User(
+        id=row["id"],
+        email=row["email"],
+        password_hash=row["password_hash"]
+    )
+
+
+
+@app.route("/api/signup", methods=["POST"])
+def signup():
+    # Get the student's account information
+    data = request.get_json(silent=True) or {}
+
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    # Check the email and password
+    if not email or "@" not in email or len(email) > 254:
+        return jsonify(error="Enter a valid email address."), 400
+
+    if len(password) < 12 or len(password) > 128:
+        return jsonify(
+            error="Password must be between 12 and 128 characters."
+        ), 400
+
+    db = get_db()
+
+    # Check whether the email is already registered
+    existing_user = execute_query(
+        db,
+        "SELECT id FROM users WHERE email = ?",
+        (email,)
+    ).fetchone()
+
+    if existing_user:
+        return jsonify(error="This email is already registered."), 409
+
+    # Hash the password before storing it
+    password_hash = generate_password_hash(password)
+
+    # Create the student account
+    if DATABASE_URL:
+        cur = execute_query(
+            db,
+            """
+            INSERT INTO users (email, password_hash)
+            VALUES (?, ?)
+            RETURNING id
+            """,
+            (email, password_hash)
+        )
+        user_id = cur.fetchone()["id"]
+    else:
+        cur = execute_query(
+            db,
+            """
+            INSERT INTO users (email, password_hash)
+            VALUES (?, ?)
+            """,
+            (email, password_hash)
+        )
+        user_id = cur.lastrowid
+
+    db.commit()
+
+    # Sign the student in after registration
+    user = User(user_id, email, password_hash)
+    login_user(user)
+
+    return jsonify(
+        message="Account created successfully!",
+        user={"id": user_id, "email": email}
+    ), 201
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    # Get the student's login information
+    data = request.get_json(silent=True) or {}
+
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    if not email or not password:
+        return jsonify(error="Email and password are required."), 400
+
+    db = get_db()
+
+    # Find the student by email
+    row = execute_query(
+        db,
+        "SELECT id, email, password_hash FROM users WHERE email = ?",
+        (email,)
+    ).fetchone()
+
+    # Check the email and password
+    if row is None or not check_password_hash(row["password_hash"], password):
+        return jsonify(error="Invalid email or password."), 401
+
+    # Sign the student in
+    user = User(
+        id=row["id"],
+        email=row["email"],
+        password_hash=row["password_hash"]
+    )
+
+    login_user(user)
+
+    return jsonify(
+        message="Logged in successfully!",
+        user={
+            "id": user.id,
+            "email": user.email
+        }
+    ), 200
+
+@app.route("/api/logout", methods=["POST"])
+def logout():
+    # Check whether the student is logged in
+    if not current_user.is_authenticated:
+        return jsonify(error="You are not logged in."), 401
+
+    # End the student's login session
+    logout_user()
+
+    return jsonify(message="Logged out successfully!"), 200
+
+
+@app.route("/api/me", methods=["GET"])
+def get_current_user():
+    # Check whether a student is logged in
+    if not current_user.is_authenticated:
+        return jsonify(
+            authenticated=False,
+            user=None
+        ), 200
+
+    # Return the logged-in student's information
+    return jsonify(
+        authenticated=True,
+        user={
+            "id": current_user.id,
+            "email": current_user.email
+        }
+    ), 200
 
 
 # ---------- database ----------
@@ -52,90 +241,249 @@ def close_db(error):
         db.close()
 
 
+
+
+
+
 def make_tables():
-    # Use PostgreSQL when DATABASE_URL is available
+    db = get_db()
+
+    # Create the users table
     if DATABASE_URL:
-        db = psycopg.connect(DATABASE_URL)
-
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS decks (
+        execute_query(db, """
+            CREATE TABLE IF NOT EXISTS users (
                 id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                name TEXT NOT NULL
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL
             )
         """)
-
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS cards (
-                id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-                deck_id INTEGER NOT NULL,
-                term TEXT NOT NULL,
-                definition TEXT NOT NULL,
-                box INTEGER NOT NULL DEFAULT 0,
-                due DOUBLE PRECISION NOT NULL DEFAULT 0,
-                times_seen INTEGER NOT NULL DEFAULT 0,
-                times_right INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS stats (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                asked INTEGER NOT NULL DEFAULT 0,
-                correct INTEGER NOT NULL DEFAULT 0,
-                streak INTEGER NOT NULL DEFAULT 0,
-                best INTEGER NOT NULL DEFAULT 0
-            )
-        """)
-
-        db.execute("""
-            INSERT INTO stats (id)
-            VALUES (1)
-            ON CONFLICT (id) DO NOTHING
-        """)
-
     else:
-        # Keep using SQLite on your MacBook
-        db = sqlite3.connect(DB_FILE)
+        execute_query(db, """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL
+            )
+        """)
 
-        db.executescript("""
+    # Create the decks table
+    if DATABASE_URL:
+        execute_query(db, """
+            CREATE TABLE IF NOT EXISTS decks (
+                id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                name TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id)
+            )
+        """)
+    else:
+        execute_query(db, """
             CREATE TABLE IF NOT EXISTS decks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL
-            );
+                name TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id)
+            )
+        """)
 
+    # Add user_id to older decks tables
+    if DATABASE_URL:
+        execute_query(db, """
+            ALTER TABLE decks
+            ADD COLUMN IF NOT EXISTS user_id
+            INTEGER REFERENCES users(id)
+        """)
+    else:
+        columns = execute_query(
+            db, "PRAGMA table_info(decks)"
+        ).fetchall()
+
+        column_names = [column["name"] for column in columns]
+
+        if "user_id" not in column_names:
+            execute_query(db, """
+                ALTER TABLE decks
+                ADD COLUMN user_id INTEGER REFERENCES users(id)
+            """)
+
+    # Create the flashcards table
+    if DATABASE_URL:
+        execute_query(db, """
             CREATE TABLE IF NOT EXISTS cards (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                deck_id INTEGER NOT NULL,
+                id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+                deck_id INTEGER NOT NULL REFERENCES decks(id),
                 term TEXT NOT NULL,
                 definition TEXT NOT NULL,
-                box INTEGER NOT NULL DEFAULT 0,
+                box INTEGER NOT NULL DEFAULT 1,
                 due REAL NOT NULL DEFAULT 0,
                 times_seen INTEGER NOT NULL DEFAULT 0,
                 times_right INTEGER NOT NULL DEFAULT 0
-            );
+            )
+        """)
+    else:
+        execute_query(db, """
+            CREATE TABLE IF NOT EXISTS cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deck_id INTEGER NOT NULL REFERENCES decks(id),
+                term TEXT NOT NULL,
+                definition TEXT NOT NULL,
+                box INTEGER NOT NULL DEFAULT 1,
+                due REAL NOT NULL DEFAULT 0,
+                times_seen INTEGER NOT NULL DEFAULT 0,
+                times_right INTEGER NOT NULL DEFAULT 0
+            )
+        """)
 
+    # Create the study statistics table
+    if DATABASE_URL:
+        execute_query(db, """
             CREATE TABLE IF NOT EXISTS stats (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
+                id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
                 asked INTEGER NOT NULL DEFAULT 0,
                 correct INTEGER NOT NULL DEFAULT 0,
                 streak INTEGER NOT NULL DEFAULT 0,
-                best INTEGER NOT NULL DEFAULT 0
-            );
-
-            INSERT OR IGNORE INTO stats (id) VALUES (1);
+                best INTEGER NOT NULL DEFAULT 0,
+                user_id INTEGER REFERENCES users(id)
+            )
+        """)
+    else:
+        execute_query(db, """
+            CREATE TABLE IF NOT EXISTS stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                asked INTEGER NOT NULL DEFAULT 0,
+                correct INTEGER NOT NULL DEFAULT 0,
+                streak INTEGER NOT NULL DEFAULT 0,
+                best INTEGER NOT NULL DEFAULT 0,
+                user_id INTEGER REFERENCES users(id)
+            )
         """)
 
+    # Add user_id to older statistics tables
+    if DATABASE_URL:
+        execute_query(db, """
+            ALTER TABLE stats
+            ADD COLUMN IF NOT EXISTS user_id
+            INTEGER REFERENCES users(id)
+        """)
+    else:
+        columns = execute_query(
+            db, "PRAGMA table_info(stats)"
+        ).fetchall()
+
+        column_names = [column["name"] for column in columns]
+
+        if "user_id" not in column_names:
+            execute_query(db, """
+                ALTER TABLE stats
+                ADD COLUMN user_id INTEGER REFERENCES users(id)
+            """)
+
+    # Keep PostgreSQL's automatic ID generation in sync
+    # with any existing statistics records.
+    if DATABASE_URL:
+        execute_query(db, """
+            SELECT setval(
+                pg_get_serial_sequence('stats', 'id'),
+                COALESCE((SELECT MAX(id) FROM stats), 1),
+                EXISTS (SELECT 1 FROM stats)
+            )
+        """)
+
+    # Remove the old single-user statistics restriction
+    # from older PostgreSQL databases
+    if DATABASE_URL:
+        execute_query(db, """
+            ALTER TABLE stats
+            DROP CONSTRAINT IF EXISTS stats_id_check
+        """)
+
+    # Make sure each student has only one statistics record
+    execute_query(db, """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_stats_user_id
+        ON stats (user_id)
+    """)
+
+    # Keep the original shared stats record for compatibility
+    execute_query(db, """
+        INSERT INTO stats (id, asked, correct, streak, best)
+        SELECT 1, 0, 0, 0, 0
+        WHERE NOT EXISTS (
+            SELECT 1 FROM stats WHERE id = 1
+        )
+    """)
+
     db.commit()
-    db.close()
+
+
+
+
 
 def get_stats(db):
-    # Get the user's study statistics
+    # Get the currently logged-in student's ID
+    user_id = current_user.id
+
+    # Look for the student's existing statistics
     row = execute_query(
         db,
-        "SELECT asked, correct, streak, best FROM stats WHERE id = 1"
+        """
+        SELECT asked, correct, streak, best
+        FROM stats
+        WHERE user_id = ?
+        """,
+        (user_id,)
     ).fetchone()
 
-    return dict(row)
+    # Create a statistics record for new students
+    if row is None:
+        if DATABASE_URL:
+            execute_query(
+                db,
+                """
+                INSERT INTO stats
+                    (user_id, asked, correct, streak, best)
+                VALUES (?, 0, 0, 0, 0)
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                (user_id,)
+            )
+        else:
+            execute_query(
+                db,
+                """
+                INSERT OR IGNORE INTO stats
+                    (user_id, asked, correct, streak, best)
+                VALUES (?, 0, 0, 0, 0)
+                """,
+                (user_id,)
+            )
+
+        db.commit()
+
+        # Try reading the statistics again
+        row = execute_query(
+            db,
+            """
+            SELECT asked, correct, streak, best
+            FROM stats
+            WHERE user_id = ?
+            """,
+            (user_id,)
+        ).fetchone()
+
+    # If no record exists, return safe starting values
+    if row is None:
+        return {
+            "asked": 0,
+            "correct": 0,
+            "streak": 0,
+            "best": 0
+        }
+
+    # Return the student's saved statistics
+    return {
+        "asked": row["asked"],
+        "correct": row["correct"],
+        "streak": row["streak"],
+        "best": row["best"]
+    }
 
 
 # ---------- pages ----------
@@ -148,22 +496,36 @@ def home():
 # ---------- decks ----------
 
 @app.route("/api/decks", methods=["GET"])
+@login_required
 def list_decks():
     db = get_db()
-    rows = execute_query(db, """
+
+    # Only retrieve decks owned by the logged-in student
+    rows = execute_query(
+        db,
+        """
         SELECT d.id, d.name,
                COUNT(c.id) AS total,
-               COALESCE(SUM(CASE WHEN c.due <= ? THEN 1 ELSE 0 END), 0) AS due
+               COALESCE(
+                   SUM(CASE WHEN c.due <= ? THEN 1 ELSE 0 END),
+                   0
+               ) AS due
         FROM decks d
         LEFT JOIN cards c ON c.deck_id = d.id
-        GROUP BY d.id
+        WHERE d.user_id = ?
+        GROUP BY d.id, d.name
         ORDER BY d.id
-    """, (time.time(),)).fetchall()
-    return jsonify([dict(r) for r in rows])
+        """,
+        (time.time(), current_user.id)
+    ).fetchall()
+
+    return jsonify([dict(row) for row in rows])
 
 
 @app.route("/api/decks", methods=["POST"])
+@login_required
 def add_deck():
+    # Get the student's deck information
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()[:40]
     notes = data.get("notes") or ""
@@ -171,69 +533,100 @@ def add_deck():
     if not name:
         return jsonify(error="Give the deck a name."), 400
 
+    # Convert the notes into flashcards
     cards = quiz.parse_notes(notes)
+
     if not cards:
-        return jsonify(error="No cards found. Write one per line as term: definition."), 400
+        return jsonify(
+            error="No cards found. Write one per line as term: definition."
+        ), 400
 
     db = get_db()
 
-    # Create a new study deck
+    # Create a deck owned by the logged-in student
     if DATABASE_URL:
-        # PostgreSQL returns the new deck ID
         cur = execute_query(
             db,
-            "INSERT INTO decks (name) VALUES (?) RETURNING id",
-            (name,)
+            """
+            INSERT INTO decks (name, user_id)
+            VALUES (?, ?)
+            RETURNING id
+            """,
+            (name, current_user.id)
         )
+
         deck_id = cur.fetchone()["id"]
+
     else:
-        # SQLite gets the ID from lastrowid
         cur = execute_query(
             db,
-            "INSERT INTO decks (name) VALUES (?)",
-            (name,)
+            """
+            INSERT INTO decks (name, user_id)
+            VALUES (?, ?)
+            """,
+            (name, current_user.id)
         )
+
         deck_id = cur.lastrowid
 
-    # Add the flashcards to the deck
+    # Add flashcards to the new deck
     for term, definition in cards:
         execute_query(
             db,
-            "INSERT INTO cards (deck_id, term, definition) VALUES (?, ?, ?)",
+            """
+            INSERT INTO cards (deck_id, term, definition)
+            VALUES (?, ?, ?)
+            """,
             (deck_id, term, definition)
         )
 
     db.commit()
 
-    return jsonify(id=deck_id, name=name, cards=len(cards)), 201
+    return jsonify(
+        id=deck_id,
+        name=name,
+        cards=len(cards)
+    ), 201
 
 
 
 @app.route("/api/decks/<int:deck_id>/cards", methods=["POST"])
+@login_required
 def add_cards(deck_id):
     db = get_db()
 
-    # Check if the deck exists
+    # Check that this deck belongs to the logged-in student
     deck = execute_query(
         db,
-        "SELECT id FROM decks WHERE id = ?",
-        (deck_id,)
+        """
+        SELECT id FROM decks
+        WHERE id = ? AND user_id = ?
+        """,
+        (deck_id, current_user.id)
     ).fetchone()
 
     if deck is None:
-        return jsonify(error="That deck doesn't exist anymore."), 404
+        return jsonify(
+            error="Deck not found."
+        ), 404
 
+    # Get the student's new flashcards
     data = request.get_json(silent=True) or {}
     cards = quiz.parse_notes(data.get("notes") or "")
 
     if not cards:
-        return jsonify(error="No cards found. Write one per line as term: definition."), 400
+        return jsonify(
+            error="No cards found. Write one per line as term: definition."
+        ), 400
 
-    # Add the new flashcards
+    # Add flashcards only to the student's own deck
     for term, definition in cards:
         execute_query(
             db,
-            "INSERT INTO cards (deck_id, term, definition) VALUES (?, ?, ?)",
+            """
+            INSERT INTO cards (deck_id, term, definition)
+            VALUES (?, ?, ?)
+            """,
             (deck_id, term, definition)
         )
 
@@ -243,71 +636,133 @@ def add_cards(deck_id):
 
 
 @app.route("/api/decks/<int:deck_id>", methods=["DELETE"])
+@login_required
 def delete_deck(deck_id):
     db = get_db()
 
-    # Delete all flashcards in this deck
+    # Check that the deck belongs to the logged-in student
+    deck = execute_query(
+        db,
+        """
+        SELECT id FROM decks
+        WHERE id = ? AND user_id = ?
+        """,
+        (deck_id, current_user.id)
+    ).fetchone()
+
+    if deck is None:
+        return jsonify(error="Deck not found."), 404
+
+    # Delete flashcards belonging to this deck
     execute_query(
         db,
         "DELETE FROM cards WHERE deck_id = ?",
         (deck_id,)
     )
 
-    # Delete the study deck
-    execute_query(
-        db,
-        "DELETE FROM decks WHERE id = ?",
-        (deck_id,)
-    )
-
-    # Reset study stats but keep the best streak
+    # Delete the student's deck
     execute_query(
         db,
         """
-        UPDATE stats
-        SET streak = 0, asked = 0, correct = 0
-        WHERE id = 1
-        """
+        DELETE FROM decks
+        WHERE id = ? AND user_id = ?
+        """,
+        (deck_id, current_user.id)
     )
 
     db.commit()
 
-    return jsonify(ok=True)
+    return jsonify(ok=True), 200
 
 
 # ---------- quizzing ----------
 
 @app.route("/api/decks/<int:deck_id>/next")
+@login_required
+
 def next_card(deck_id):
     db = get_db()
+
+    # Check that the deck belongs to the logged-in student
+    deck = execute_query(
+        db,
+        """
+        SELECT id FROM decks
+        WHERE id = ? AND user_id = ?
+        """,
+        (deck_id, current_user.id)
+    ).fetchone()
+
+    if deck is None:
+        return jsonify(error="Deck not found."), 404
+
+    # Check whether the student wants to practice early
     force = request.args.get("force") == "1"
+
+    # Remember the previous card to avoid immediate repeats
     last_id = request.args.get("last", type=int)
 
-    # Get flashcards from the selected deck
+    # Cards already answered during this quiz attempt
+    excluded_ids = set()
+
+    excluded_text = request.args.get("exclude", "")
+
+    if excluded_text:
+        try:
+            excluded_ids = {
+                int(card_id)
+                for card_id in excluded_text.split(",")
+                if card_id.strip()
+            }
+        except ValueError:
+            return jsonify(error="Invalid excluded card IDs."), 400
+
+    # Get flashcards from the student's own deck
     if force:
         rows = execute_query(
             db,
-            "SELECT * FROM cards WHERE deck_id = ?",
+            """
+            SELECT * FROM cards
+            WHERE deck_id = ?
+            """,
             (deck_id,)
         ).fetchall()
     else:
         rows = execute_query(
             db,
-            "SELECT * FROM cards WHERE deck_id = ? AND due <= ?",
+            """
+            SELECT * FROM cards
+            WHERE deck_id = ? AND due <= ?
+            """,
             (deck_id, time.time())
         ).fetchall()
 
+    # Remove cards already answered in this quiz attempt
+    rows = [
+        row for row in rows
+        if row["id"] not in excluded_ids
+    ]
+
+    # No cards left to quiz
     if not rows:
         return jsonify(done=True)
 
-    # Ask the cards I know the least first
-    lowest_box = min(r["box"] for r in rows)
-    pool = [r for r in rows if r["box"] == lowest_box]
+    # Prioritize flashcards the student knows the least
+    lowest_box = min(row["box"] for row in rows)
 
-    # Try not to repeat the last card
+    pool = [
+        row for row in rows
+        if row["box"] == lowest_box
+    ]
+
+    # Avoid repeating the previous flashcard when possible
     if len(pool) > 1 and last_id:
-        pool = [r for r in pool if r["id"] != last_id]
+        pool = [
+            row for row in pool
+            if row["id"] != last_id
+        ]
 
+    # Randomly choose a flashcard
     pick = random.choice(pool)
 
     return jsonify(
@@ -318,22 +773,32 @@ def next_card(deck_id):
 
 
 @app.route("/api/cards/<int:card_id>/answer", methods=["POST"])
+@login_required
 def check_answer(card_id):
-    # Check the answer without saving the result yet
     db = get_db()
 
+    # Find the flashcard only if it belongs to the student
     card = execute_query(
         db,
-        "SELECT * FROM cards WHERE id = ?",
-        (card_id,)
+        """
+        SELECT c.*
+        FROM cards c
+        JOIN decks d ON c.deck_id = d.id
+        WHERE c.id = ? AND d.user_id = ?
+        """,
+        (card_id, current_user.id)
     ).fetchone()
 
+    # Don't reveal flashcards belonging to other students
     if card is None:
-        return jsonify(error="That card doesn't exist anymore."), 404
+        return jsonify(
+            error="Flashcard not found."
+        ), 404
 
+    # Get the student's answer
     data = request.get_json(silent=True) or {}
 
-    # Compare the student's answer with the definition
+    # Compare their answer with the correct definition
     score = quiz.grade(
         data.get("answer", ""),
         card["definition"]
@@ -346,26 +811,36 @@ def check_answer(card_id):
     )
 
 
+
 @app.route("/api/cards/<int:card_id>/result", methods=["POST"])
+@login_required
+
 def save_result(card_id):
     db = get_db()
 
-    # Find the flashcard
+    # Find the flashcard only if it belongs to this student
     card = execute_query(
         db,
-        "SELECT * FROM cards WHERE id = ?",
-        (card_id,)
+        """
+        SELECT c.*
+        FROM cards c
+        JOIN decks d ON c.deck_id = d.id
+        WHERE c.id = ? AND d.user_id = ?
+        """,
+        (card_id, current_user.id)
     ).fetchone()
 
     if card is None:
-        return jsonify(error="That card doesn't exist anymore."), 404
+        return jsonify(error="Flashcard not found."), 404
 
+    # Get the student's quiz result
     data = request.get_json(silent=True) or {}
     was_right = bool(data.get("correct"))
 
-    # Update the flashcard's review schedule
+    # Calculate the next review schedule
     new_box = quiz.next_box(card["box"], was_right)
 
+    # Update the student's flashcard progress
     execute_query(
         db,
         """
@@ -384,28 +859,40 @@ def save_result(card_id):
         )
     )
 
-    # Update the student's study statistics
+    # Load the student's current statistics
     stats = get_stats(db)
+
+    # Update statistics for this answer
     stats["asked"] += 1
 
     if was_right:
         stats["correct"] += 1
         stats["streak"] += 1
-        stats["best"] = max(stats["best"], stats["streak"])
+        stats["best"] = max(
+            stats["best"],
+            stats["streak"]
+        )
     else:
         stats["streak"] = 0
 
+    # Save the student's statistics.
+    # UPSERT creates the row if it doesn't exist,
+    # or updates it if the student already has one.
     execute_query(
         db,
         """
-        UPDATE stats
-        SET asked = ?,
-            correct = ?,
-            streak = ?,
-            best = ?
-        WHERE id = 1
+        INSERT INTO stats
+            (user_id, asked, correct, streak, best)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT (user_id)
+        DO UPDATE SET
+            asked = excluded.asked,
+            correct = excluded.correct,
+            streak = excluded.streak,
+            best = excluded.best
         """,
         (
+            current_user.id,
             stats["asked"],
             stats["correct"],
             stats["streak"],
@@ -413,20 +900,39 @@ def save_result(card_id):
         )
     )
 
+    # Save changes to the database
     db.commit()
 
+    # Return the student's updated statistics
     return jsonify(stats)
 
 
-@app.route("/api/stats")
-def stats():
-    return jsonify(get_stats(get_db()))
 
 
-make_tables()
+@app.route("/api/stats", methods=["GET"])
+@login_required
+def get_study_stats():
+    db = get_db()
+
+    # Load statistics for the logged-in student
+    stats = get_stats(db)
+
+    # Return only this student's progress
+    return jsonify(
+        asked=stats["asked"],
+        correct=stats["correct"],
+        streak=stats["streak"],
+        best=stats["best"]
+    )
+
+
+
+
+with app.app_context():
+    make_tables()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1")
 
 
 #  /\_/\

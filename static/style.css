@@ -183,3 +183,253 @@ dialog label { display: block; margin: 12px 0 4px; font-weight: 500; }
   .chips { grid-column: 1; flex-wrap: nowrap; }
   .composer { grid-column: 2; }
 }
+
+
+/* ---------- student accounts ---------- */
+
+/* Login and signup screen */
+.auth-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+/* Main account card */
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: #fff;
+  border: 4px solid var(--ink);
+  border-radius: 26px;
+  padding: 28px;
+  box-shadow: 7px 7px 0 var(--ink);
+}
+
+/* Robot mascot */
+.auth-mascot {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.auth-mascot img {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  background: #fff;
+  border: 4px solid var(--ink);
+  border-radius: 50%;
+}
+
+/* Account headings */
+.auth-card h1 {
+  text-align: center;
+  font-size: 2.4rem;
+  margin: 0;
+  font-weight: 700;
+}
+
+.auth-subtitle {
+  text-align: center;
+  margin: 8px 0 24px;
+  color: #555577;
+  font-size: 1rem;
+}
+
+.auth-card h2 {
+  font-size: 1.5rem;
+  margin: 0 0 16px;
+}
+
+/* Login and signup tabs */
+.auth-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.auth-tabs .btn {
+  flex: 1;
+}
+
+/* Account form */
+#authForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#authForm label {
+  font-weight: 600;
+  margin-top: 6px;
+}
+
+#authForm input {
+  width: 100%;
+  min-height: 48px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+#authForm input:focus {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Account error messages */
+#authMessage {
+  margin: 4px 0;
+  min-height: 22px;
+  font-size: 0.95rem;
+}
+
+/* Login and signup submit button */
+.auth-submit {
+  width: 100%;
+  margin-top: 8px;
+  min-height: 52px;
+  font-size: 1.1rem;
+}
+
+/* Small message below form */
+.auth-footer {
+  text-align: center;
+  font-size: 0.95rem;
+  color: #555577;
+  margin: 22px 0 0;
+}
+
+/* Account information on the dashboard */
+.account-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+#accountEmail {
+  font-size: 0.95rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+#logoutBtn {
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: 0.9rem;
+}
+
+/* Smaller phones */
+@media (max-width: 560px) {
+  .auth-screen {
+    align-items: flex-start;
+    padding: 20px 14px;
+  }
+
+  .auth-card {
+    margin: auto 0;
+    padding: 22px 18px;
+    border-radius: 22px;
+  }
+
+  .auth-card h1 {
+    font-size: 2rem;
+  }
+
+  .auth-mascot img {
+    width: 82px;
+    height: 82px;
+  }
+
+  .auth-tabs {
+    gap: 8px;
+  }
+
+  .account-bar {
+    gap: 8px;
+  }
+
+  #accountEmail {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+  }
+}
+
+
+/* ---------- password fields ---------- */
+
+/* Keep password input and Show/Hide button together */
+.password-field {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  position: relative;
+}
+
+.password-field input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 75px !important;
+}
+
+/* Show/Hide password button */
+.password-toggle {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #ffd23f;
+  color: #1b1b3a;
+  border: 2px solid #1b1b3a;
+  border-radius: 9px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.password-toggle:hover {
+  background: #ffe27d;
+}
+
+.password-toggle:focus-visible {
+  outline: 3px solid #4da3ff;
+  outline-offset: 2px;
+}
+
+/* Password instructions */
+.password-help {
+  margin: 2px 0 10px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #555577;
+}
+
+.password-help strong {
+  color: #1b1b3a;
+}
+
+/* Confirmation field */
+#confirmPasswordGroup {
+  margin-top: 10px;
+}
+
+#confirmPasswordGroup label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* Make sure hidden elements actually stay hidden */
+[hidden] {
+  display: none !important;
+}
