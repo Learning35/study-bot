@@ -1,46 +1,84 @@
-# Study Bot
+# 🤖 Study Bot
 
-A study app I made with Python (Flask) and JavaScript. You paste your notes
-and a chatbot quizzes you on them. Cards you get wrong come back sooner, and
-cards you know come back later.
+Study Bot is a web app I built using Python, Flask, and JavaScript to make studying easier and more interactive. It lets you turn your notes into flashcards, take quizzes, and keep track of how well you're doing.
 
-## What it does
-- Make a deck from your notes, one card per line like `term: meaning`
-- Pick a deck from the dropdown, add more cards, or delete it
-- Chat commands: `quiz`, `quiz anyway`, `skip`, `stats`, `clear`, `help`
-- Checks your answer for the important words
-- If it marks you wrong but you were right, click "I was right"
-- Shows your streak and how often you're right
-- Focus timer (starts at 25 minutes, you can change it with + and -)
-- Works on iPhone, iPad, and laptop
+## ✨ Features
 
-## Built with
-Python, Flask, SQLite, JavaScript, HTML/CSS
+- **Flashcards:** Create your own study decks using notes and definitions.
+- **Chat Quizzes:** Answer questions through a chatbot-style interface.
+- **Smart Review:** Cards you get wrong show up sooner, while cards you know appear less often.
+- **Answer Checking:** Checks your answers by comparing important words.
+- **Progress Tracking:** See your accuracy, current streak, and best streak.
+- **Study Timer:** Includes a timer to help you stay focused.
+- **Mobile Friendly:** Works on phones, tablets, and computers.
+- **Offline Mode:** Study in your browser without needing to run Python.
 
-## Files
-- `app.py` - the Flask routes and the database
-- `quiz.py` - reads notes, grades answers, and decides when a card comes back
-- `templates/index.html`, `static/style.css`, `static/app.js` - what you see on the page
+## 🛠️ Built With
 
-## How to run it
+- **Python** – Handles the quiz logic.
+- **Flask** – Connects the website to the backend.
+- **SQLite** – Saves flashcards and study progress.
+- **JavaScript** – Makes the website interactive.
+- **HTML & CSS** – Creates the website's design.
+
+## 🚀 How to Run It
+
+First, download the project:
+
+```bash
+git clone https://github.com/Learning35/study-bot.git
+cd study-bot
 ```
-python -m venv venv
-venv\Scripts\activate
+
+Create and activate a Python virtual environment:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+Install the required packages:
+
+```bash
 pip install -r requirements.txt
+```
+
+Start the app:
+
+```bash
 python app.py
 ```
-On Mac, use `source venv/bin/activate` instead of the second line.
-Then go to http://127.0.0.1:5000
 
-## Without Python
-You can also open `index.html` with Live Server in VS Code. It saves your
-decks in the browser instead of the database.
+Open `http://127.0.0.1:5000` in your browser.
 
-## Things to fix later
-The grader only looks for words, so it can't tell if an answer says the
-opposite thing (like "first in" instead of "last in").
+You can also use the browser-only version by opening `index.html` with Live Server in VS Code.
 
-## Ideas for later
-- Make cards from notes automatically with an AI API
-- Save and load decks as files
-- Edit or delete single cards
+## 📚 How It Works
+
+1. Create a study deck by adding your notes.
+2. Choose the deck you want to study.
+3. Let Study Bot quiz you on your flashcards.
+4. Type your answers and see how you did.
+5. Keep practicing to improve your score.
+
+Study Bot also remembers which cards you struggle with so you can practice them more often.
+
+## 📸 Screenshots
+
+![Study Bot Interface](screenshots/study-bot.png)
+
+## 🔮 Future Plans
+
+Some features I want to add later:
+
+- Use AI to create flashcards from notes.
+- Let AI explain answers when you get something wrong.
+- Allow users to upload study materials.
+- Add more ways to track study progress.
+- Let users edit individual flashcards.
+
+## 💻 Why I Built This
+
+I wanted to build something that could help students study while also improving my programming skills. This project gave me a chance to work with Python, build a website, use a database, and connect everything together.
+
+I plan to keep improving Study Bot as I learn more about software development.
