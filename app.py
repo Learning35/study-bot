@@ -376,16 +376,7 @@ def make_tables():
                 ADD COLUMN user_id INTEGER REFERENCES users(id)
             """)
 
-    # Keep PostgreSQL's automatic ID generation in sync
-    # with any existing statistics records.
-    if DATABASE_URL:
-        execute_query(db, """
-            SELECT setval(
-                pg_get_serial_sequence('stats', 'id'),
-                COALESCE((SELECT MAX(id) FROM stats), 1),
-                EXISTS (SELECT 1 FROM stats)
-            )
-        """)
+
 
     # Remove the old single-user statistics restriction
     # from older PostgreSQL databases
@@ -406,9 +397,18 @@ def make_tables():
         INSERT INTO stats (id, asked, correct, streak, best)
         SELECT 1, 0, 0, 0, 0
         WHERE NOT EXISTS (
-            SELECT 1 FROM stats WHERE id = 1
-        )
+            SELECT 1 FROM stats WHERE id = 1)
     """)
+    # Keep PostgreSQL's automatic ID generation in sync
+    # with any existing statistics records.
+    if DATABASE_URL:
+        execute_query(db, """
+            SELECT setval(
+                pg_get_serial_sequence('stats', 'id'),
+                COALESCE((SELECT MAX(id) FROM stats), 1),
+                EXISTS (SELECT 1 FROM stats)
+            )
+        """)
 
     db.commit()
 
