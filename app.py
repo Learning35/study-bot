@@ -635,6 +635,115 @@ def add_cards(deck_id):
     return jsonify(added=len(cards)), 201
 
 
+
+@app.route("/api/decks/<int:deck_id>", methods=["PUT"])
+@login_required
+def edit_deck(deck_id):
+    db = get_db()
+
+    # Make sure the deck belongs to the logged-in student
+    deck = execute_query(
+        db,
+        """
+        SELECT id, name FROM decks
+        WHERE id = ? AND user_id = ?
+        """,
+        (deck_id, current_user.id)
+    ).fetchone()
+
+    if deck is None:
+        return jsonify(error="Deck not found."), 404
+
+    # Get the updated deck name
+    data = request.get_json(silent=True) or {}
+    name = data.get("name")
+
+    if not isinstance(name, str):
+        return jsonify(error="Give the deck a valid name."), 400
+
+    name = name.strip()
+
+    if not name:
+        return jsonify(error="Deck name cannot be empty."), 400
+
+    if len(name) > 40:
+        return jsonify(error="Deck name must be 40 characters or less."), 400
+
+    # Update the deck without changing its flashcards
+    execute_query(
+        db,
+        """
+        UPDATE decks
+        SET name = ?
+        WHERE id = ? AND user_id = ?
+        """,
+        (name, deck_id, current_user.id)
+    )
+
+    db.commit()
+
+    return jsonify(
+        id=deck_id,
+        name=name,
+        ok=True
+    ), 200
+
+
+@app.route("/api/cards/<int:card_id>", methods=["PUT"])
+@login_required
+def edit_card(card_id):
+    db = get_db()
+
+    # Only allow students to edit cards in their own decks
+    card = execute_query(
+        db,
+        """
+        SELECT c.id
+        FROM cards c
+        JOIN decks d ON c.deck_id = d.id
+        WHERE c.id = ? AND d.user_id = ?
+        """,
+        (card_id, current_user.id)
+    ).fetchone()
+
+    if card is None:
+        return jsonify(error="Flashcard not found."), 404
+
+    # Get the updated question and answer
+    data = request.get_json(silent=True) or {}
+    term = data.get("term")
+    definition = data.get("definition")
+
+    if not isinstance(term, str) or not isinstance(definition, str):
+        return jsonify(error="Enter a valid question and answer."), 400
+
+    term = term.strip()
+    definition = definition.strip()
+
+    if not term or not definition:
+        return jsonify(error="Question and answer cannot be empty."), 400
+
+    # Update the existing card without resetting study progress
+    execute_query(
+        db,
+        """
+        UPDATE cards
+        SET term = ?, definition = ?
+        WHERE id = ?
+        """,
+        (term, definition, card_id)
+    )
+
+    db.commit()
+
+    return jsonify(
+        id=card_id,
+        term=term,
+        definition=definition,
+        ok=True
+    ), 200
+
+
 @app.route("/api/decks/<int:deck_id>", methods=["DELETE"])
 @login_required
 def delete_deck(deck_id):
@@ -770,6 +879,39 @@ def next_card(deck_id):
         id=pick["id"],
         term=pick["term"]
     )
+
+
+@app.route("/api/decks/<int:deck_id>/cards", methods=["GET"])
+@login_required
+def list_cards(deck_id):
+    db = get_db()
+
+    # Make sure this deck belongs to the logged-in student
+    deck = execute_query(
+        db,
+        """
+        SELECT id FROM decks
+        WHERE id = ? AND user_id = ?
+        """,
+        (deck_id, current_user.id)
+    ).fetchone()
+
+    if deck is None:
+        return jsonify(error="Deck not found."), 404
+
+    # Retrieve all flashcards in this deck
+    cards = execute_query(
+        db,
+        """
+        SELECT id, term, definition
+        FROM cards
+        WHERE deck_id = ?
+        ORDER BY id
+        """,
+        (deck_id,)
+    ).fetchall()
+
+    return jsonify([dict(card) for card in cards]), 200
 
 
 @app.route("/api/cards/<int:card_id>/answer", methods=["POST"])

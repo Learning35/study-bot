@@ -322,58 +322,123 @@
   </dialog>
 
   <!-- Manage deck dialog -->
-  <dialog id="manageDialog">
-    <h2 id="manageTitle">Manage deck</h2>
 
-    <p id="manageCount" class="count"></p>
+<dialog id="manageDialog">
+  <h2 id="manageTitle">Manage deck</h2>
 
-    <label for="moreNotes">
-      Add more cards: one per line, like
-      <i>term: meaning</i>
-    </label>
+  <p id="manageCount" class="count"></p>
 
-    <textarea
-      id="moreNotes"
-      rows="5"
-      placeholder="Heap: a tree where every parent is bigger than its children"
-    ></textarea>
+  <!-- Edit the name of an existing deck -->
+  <div class="edit-deck-section">
+    <label for="editDeckName">Edit deck name:</label>
 
-    <p id="manageMsg" class="form-msg" role="status"></p>
+    <input
+      id="editDeckName"
+      type="text"
+      maxlength="40"
+      placeholder="Enter deck name"
+    />
 
-    <div id="manageRow" class="dialog-row">
-      <button
-        id="deleteDeckBtn"
-        class="btn red"
-        type="button"
-      >
-        Delete deck 🗑
-      </button>
+  <div class="dialog-row">
+    <button id="cancelEditDeck" class="btn" type="button">
+      Cancel
+    </button>
 
-      <span class="spacer"></span>
+    <button id="saveDeckName" class="btn pink" type="button">
+      Save changes
+    </button>
+  </div>
 
-      <button id="closeManage" class="btn" type="button">
-        Close
-      </button>
+  <hr />
 
-      <button id="addCardsBtn" class="btn pink" type="button">
-        Add cards
-      </button>
-    </div>
+  <!-- Add new flashcards -->
+  <label for="moreNotes">
+    Add more cards: one per line, like
+    <i>term: meaning</i>
+  </label>
 
-    <div id="confirmRow" class="dialog-row" hidden>
-      <b>Delete this deck for good?</b>
+  <textarea
+    id="moreNotes"
+    rows="5"
+    placeholder="Heap: a tree where every parent is bigger than its children"
+  ></textarea>
+  
+<!-- Edit existing flashcards -->
+<hr />
 
-      <span class="spacer"></span>
+<div class="edit-cards-section">
+  <h3>Edit flashcards</h3>
 
-      <button id="keepDeck" class="btn" type="button">
-        Keep it
-      </button>
+  <label for="editCardSelect">Choose a flashcard:</label>
+  <select id="editCardSelect">
+    <option value="">Select a flashcard</option>
+  </select>
 
-      <button id="confirmDelete" class="btn red" type="button">
-        Yes, delete
-      </button>
-    </div>
-  </dialog>
+  <label for="editCardTerm">Question:</label>
+  <textarea
+    id="editCardTerm"
+    rows="2"
+    placeholder="Flashcard question"
+  ></textarea>
+
+  <label for="editCardDefinition">Answer:</label>
+  <textarea
+    id="editCardDefinition"
+    rows="3"
+    placeholder="Flashcard answer"
+  ></textarea>
+
+  <div class="dialog-row">
+    <button id="cancelEditCard" class="btn" type="button">
+      Cancel
+    </button>
+
+    <button id="saveEditCard" class="btn pink" type="button">
+      Save flashcard
+    </button>
+  </div>
+
+  <p id="editCardMsg" class="form-msg" role="status"></p>
+</div>
+
+  <p id="manageMsg" class="form-msg" role="status"></p>
+
+  <div id="manageRow" class="dialog-row">
+    <button
+      id="deleteDeckBtn"
+      class="btn red"
+      type="button"
+    >
+      Delete deck 🗑
+    </button>
+
+    <span class="spacer"></span>
+
+    <button id="closeManage" class="btn" type="button">
+      Close
+    </button>
+
+    <button id="addCardsBtn" class="btn pink" type="button">
+      Add cards
+    </button>
+  </div>
+
+  <!-- Confirm before deleting -->
+  <div id="confirmRow" class="dialog-row" hidden>
+    <b>Delete this deck for good?</b>
+
+    <span class="spacer"></span>
+
+    <button id="keepDeck" class="btn" type="button">
+      Keep it
+    </button>
+
+    <button id="confirmDelete" class="btn red" type="button">
+      Yes, delete
+    </button>
+  </div>
+</dialog>
+
 
   <!-- JavaScript -->
   <script src="{{ url_for('static', filename='auth.js') }}" defer></script>

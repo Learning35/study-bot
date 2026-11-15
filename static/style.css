@@ -138,7 +138,14 @@ dialog h2 { margin: 0 0 6px; font-size: 1.6rem; }
 dialog label { display: block; margin: 12px 0 4px; font-weight: 500; }
 .form-msg { min-height: 1.3em; margin: 8px 0; color: #c2183f; font-weight: 500; }
 .dialog-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* Match Edit Deck button spacing with Edit Flashcard */
+.edit-deck-section .dialog-row { margin-top: 8px; }
+
+#editDeckName { display: block; margin-bottom: 0; box-sizing: border-box; }
+
 .spacer { flex: 1; }
+
 
 /* ---------- different screens ---------- */
 

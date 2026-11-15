@@ -551,7 +551,7 @@ document.querySelectorAll(".chips button[data-cmd]").forEach((btn) => {
 document.getElementById("clearBtn").addEventListener("click", safely(clearChat));
 
 
-// ---------- manage deck (add cards, delete) ----------
+// ---------- manage deck (edit name, add cards, delete) ----------
 
 const manageDialog = document.getElementById("manageDialog");
 
@@ -562,17 +562,174 @@ document.getElementById("deckSelect").addEventListener(
 
 document.getElementById("manageBtn").addEventListener("click", () => {
   if (!activeDeck) return;
+
   document.getElementById("manageTitle").textContent = activeDeck.name;
-  document.getElementById("manageCount").textContent = activeDeck.total + (activeDeck.total === 1 ? " card" : " cards") + " in this deck";
+  document.getElementById("manageCount").textContent =
+    activeDeck.total + (activeDeck.total === 1 ? " card" : " cards") + " in this deck";
+
+  document.getElementById("editDeckName").value = activeDeck.name;
   document.getElementById("manageMsg").textContent = "";
   document.getElementById("moreNotes").value = "";
+
   showConfirm(false);
   manageDialog.showModal();
-  document.getElementById("moreNotes").focus();
+  loadEditableCards().catch((err) => {
+    document.getElementById("editCardMsg").textContent = err.message;
+});
+  document.getElementById("editDeckName").focus();
 });
 
-document.getElementById("closeManage").addEventListener("click", () => manageDialog.close());
+// Close the Manage Deck window
+document.getElementById("closeManage").addEventListener("click", () => {
+  manageDialog.close();
+});
 
+// Save the updated deck name
+document.getElementById("saveDeckName").addEventListener("click", async () => {
+  const message = document.getElementById("manageMsg");
+  const name = document.getElementById("editDeckName").value.trim();
+
+  if (!name) {
+    message.textContent = "Give the deck a name.";
+    return;
+  }
+
+  try {
+    const deckId = activeDeck.id;
+
+    await api("/api/decks/" + deckId, "PUT", {
+      name: name
+    });
+
+    await loadDecks();
+
+    document.getElementById("manageTitle").textContent = activeDeck.name;
+    document.getElementById("editDeckName").value = activeDeck.name;
+
+    message.textContent = "Deck name updated successfully!";
+    say('Renamed your deck to "' + activeDeck.name + '".');
+  } catch (err) {
+    message.textContent = err.message;
+  }
+});
+
+// Cancel editing and restore the original deck name
+document.getElementById("cancelEditDeck").addEventListener("click", () => {
+  if (!activeDeck) return;
+
+  document.getElementById("editDeckName").value = activeDeck.name;
+  document.getElementById("manageMsg").textContent =
+    "Name changes canceled.";
+});
+
+
+ // ---------- edit existing flashcards ----------
+
+let editableCards = [];
+
+// Load all flashcards from the selected deck
+async function loadEditableCards() {
+  const select = document.getElementById("editCardSelect");
+
+  editableCards = await api(
+    "/api/decks/" + activeDeck.id + "/cards"
+  );
+
+  select.textContent = "";
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a flashcard";
+  select.appendChild(placeholder);
+
+  for (const card of editableCards) {
+    const option = document.createElement("option");
+    option.value = card.id;
+    option.textContent = card.term;
+    select.appendChild(option);
+  }
+
+  clearCardEditor();
+}
+
+// Clear the editing fields
+function clearCardEditor() {
+  document.getElementById("editCardSelect").value = "";
+  document.getElementById("editCardTerm").value = "";
+  document.getElementById("editCardDefinition").value = "";
+  document.getElementById("editCardMsg").textContent = "";
+}
+
+// Show the selected flashcard's question and answer
+document.getElementById("editCardSelect").addEventListener("change", () => {
+  const cardId = Number(
+    document.getElementById("editCardSelect").value
+  );
+
+  const card = editableCards.find((c) => c.id === cardId);
+
+  document.getElementById("editCardTerm").value =
+    card ? card.term : "";
+
+  document.getElementById("editCardDefinition").value =
+    card ? card.definition : "";
+
+  document.getElementById("editCardMsg").textContent = "";
+});
+
+// Cancel editing
+document.getElementById("cancelEditCard").addEventListener("click", () => {
+  clearCardEditor();
+});
+
+// Save the updated flashcard
+document.getElementById("saveEditCard").addEventListener("click", async () => {
+  const message = document.getElementById("editCardMsg");
+
+  const cardId = Number(
+    document.getElementById("editCardSelect").value
+  );
+
+  const term = document.getElementById("editCardTerm").value.trim();
+  const definition =
+    document.getElementById("editCardDefinition").value.trim();
+
+  if (!cardId) {
+    message.textContent = "Select a flashcard first.";
+    return;
+  }
+
+  if (!term || !definition) {
+    message.textContent = "Question and answer cannot be empty.";
+    return;
+  }
+
+  try {
+    await api("/api/cards/" + cardId, "PUT", {
+      term: term,
+      definition: definition
+    });
+
+    await loadEditableCards();
+
+    // Keep the edited flashcard selected
+    document.getElementById("editCardSelect").value = String(cardId);
+    document.getElementById("editCardTerm").value = term;
+    document.getElementById("editCardDefinition").value = definition;
+
+    message.textContent = "Flashcard updated successfully!";
+
+    // Refresh deck counts without deleting quiz statistics
+    await loadDecks();
+
+    say("Updated a flashcard in " + activeDeck.name + ".");
+  } catch (err) {
+    message.textContent = err.message;
+  }
+});
+
+
+// Add more flashcards to the selected deck
 document.getElementById("addCardsBtn").addEventListener("click", async () => {
   try {
     const result = await api(
@@ -580,23 +737,31 @@ document.getElementById("addCardsBtn").addEventListener("click", async () => {
       "POST",
       { notes: document.getElementById("moreNotes").value }
     );
+
     const name = activeDeck.name;
     manageDialog.close();
+
     await loadDecks();
+
     say("Added " + result.added + " new cards to " + name + "! \u{1F389}");
   } catch (err) {
     document.getElementById("manageMsg").textContent = err.message;
   }
 });
 
-// the "are you sure" is in the popup because confirm() didn't work for me
+// Show or hide the delete confirmation
 function showConfirm(on) {
   document.getElementById("confirmRow").hidden = !on;
   document.getElementById("manageRow").hidden = on;
 }
 
-document.getElementById("deleteDeckBtn").addEventListener("click", () => showConfirm(true));
-document.getElementById("keepDeck").addEventListener("click", () => showConfirm(false));
+document.getElementById("deleteDeckBtn").addEventListener("click", () => {
+  showConfirm(true);
+});
+
+document.getElementById("keepDeck").addEventListener("click", () => {
+  showConfirm(false);
+});
 
 document.getElementById("confirmDelete").addEventListener(
   "click",
@@ -605,7 +770,6 @@ document.getElementById("confirmDelete").addEventListener(
     manageDialog.close();
   })
 );
-
 
 // ---------- phone keyboard ----------
 // when the keyboard opens, make the page shorter so the answer box stays visible
