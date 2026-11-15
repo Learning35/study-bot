@@ -1,7 +1,9 @@
 venv/
 .venv/
 __pycache__/
+*.pyc
 *.db
+*.db-journal
 .DS_Store
 
 # Environment variables and secrets
